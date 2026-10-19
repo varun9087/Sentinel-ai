@@ -57,8 +57,7 @@ class WorkspaceResponse(WorkspaceBase):
     owner_id: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProjectBase(BaseModel):
@@ -80,8 +79,7 @@ class ProjectResponse(ProjectBase):
     workspace_id: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ==========================================
@@ -101,8 +99,7 @@ class ApiKeyResponse(BaseModel):
     revoked_at: Optional[datetime] = None
     last_used_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ApiKeyCreatedResponse(ApiKeyResponse):
@@ -136,8 +133,7 @@ class SpanResponse(BaseModel):
     metadata_json: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TraceIngestRequest(BaseModel):
@@ -179,8 +175,7 @@ class TraceResponse(BaseModel):
     created_at: datetime
     spans: List[SpanResponse] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TraceListResponse(BaseModel):
@@ -227,8 +222,7 @@ class DatasetExampleResponse(BaseModel):
     metadata_json: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DatasetCreate(BaseModel):
@@ -252,8 +246,7 @@ class DatasetResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DatasetDetailResponse(DatasetResponse):
@@ -288,8 +281,7 @@ class EvaluationResultResponse(BaseModel):
     error_message: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EvaluationRunResponse(BaseModel):
@@ -312,8 +304,7 @@ class EvaluationRunResponse(BaseModel):
     created_at: datetime
     completed_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EvaluationRunDetailResponse(EvaluationRunResponse):
@@ -376,8 +367,7 @@ class RagChunkResponse(BaseModel):
     content: str
     token_count: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RagDocumentResponse(BaseModel):
@@ -388,8 +378,7 @@ class RagDocumentResponse(BaseModel):
     created_at: datetime
     chunks: List[RagChunkResponse] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RagCollectionResponse(BaseModel):
@@ -403,8 +392,7 @@ class RagCollectionResponse(BaseModel):
     total_chunks: int = 0
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RagQueryRequest(BaseModel):
