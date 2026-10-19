@@ -120,6 +120,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  useEffect(() => {
+    window.addEventListener("sentinel:session-expired", logout);
+    return () => window.removeEventListener("sentinel:session-expired", logout);
+  }, []);
+
   const handleSetActiveProject = (p: Project) => {
     setActiveProject(p);
     localStorage.setItem("sentinel_active_project_id", p.id);

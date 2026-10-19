@@ -51,3 +51,20 @@ async def test_demo_login(client: AsyncClient):
     data = resp.json()
     assert data["user"]["email"] == "demo@sentinel.ai"
     assert "access_token" in data
+
+@pytest.mark.asyncio
+async def test_demo_login_disabled_in_production(client: AsyncClient, monkeypatch):
+    from backend.app.core.config import settings
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+    response = await client.post("/api/v1/auth/demo-login")
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_demo_has_no_known_password(client: AsyncClient):
+    await client.post("/api/v1/auth/demo-login")
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "demo@sentinel.ai", "password": "SentinelDemo2026!"},
+    )
+    assert response.status_code == 401

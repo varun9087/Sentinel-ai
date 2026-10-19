@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   AlertCircle,
   Copy,
@@ -54,6 +55,7 @@ interface TraceListResponse {
 }
 
 export const TracesPage: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const { activeProject } = useAuth();
   const [traces, setTraces] = useState<Trace[]>([]);
   const [total, setTotal] = useState(0);
@@ -62,9 +64,9 @@ export const TracesPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   // Filters
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "all");
   const [operationFilter, setOperationFilter] = useState("all");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(searchParams.get("search") || "");
 
   // Trace Detail Modal
   const [selectedTrace, setSelectedTrace] = useState<Trace | null>(null);

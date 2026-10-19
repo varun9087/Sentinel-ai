@@ -1,19 +1,24 @@
-import React, { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Activity,
-  AlertTriangle,
+  ArrowDownLeft,
+  ArrowRight,
   ArrowUpRight,
-  Clock,
+  Check,
+  Clock3,
   Coins,
   Database,
-  Sparkles,
+  FlaskConical,
+  Layers,
+  RefreshCw,
+  Terminal,
+  TriangleAlert,
 } from "lucide-react";
 import { apiFetch } from "../api/client";
-import { StatCard } from "../components/StatCard";
 import { useAuth } from "../context/AuthContext";
 
-interface DashboardMetrics {
+interface Metrics {
   total_requests: number;
   successful_requests: number;
   error_requests: number;
@@ -25,387 +30,493 @@ interface DashboardMetrics {
   total_output_tokens: number;
   total_tokens: number;
   estimated_total_cost: number;
-  model_breakdown: Array<{
+  model_breakdown: {
     model: string;
     requests: number;
     tokens: number;
     cost: number;
-  }>;
-  volume_over_time: Array<{
-    date: string;
-    requests: number;
-    errors: number;
-  }>;
-  recent_failed_traces: Array<{
+  }[];
+  volume_over_time: { date: string; requests: number; errors: number }[];
+  recent_failed_traces: {
     id: string;
     trace_id: string;
     model: string;
     latency_ms: number;
     error_message: string;
     created_at: string;
-  }>;
+  }[];
 }
-
-export const DashboardPage: React.FC = () => {
+interface Trace {
+  id: string;
+  trace_id: string;
+  name: string;
+  model: string;
+  status: string;
+  latency_ms: number;
+  total_tokens: number;
+  estimated_cost: number;
+  created_at: string;
+}
+export const DashboardPage = () => {
   const { activeProject } = useAuth();
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [traces, setTraces] = useState<Trace[]>([]);
+  const [days, setDays] = useState("7");
   const [loading, setLoading] = useState(true);
-  const [seeding, setSeeding] = useState(false);
-
-  const fetchMetrics = async () => {
-    if (!activeProject) return;
-    setLoading(true);
-    try {
-      const data = await apiFetch<DashboardMetrics>(`/projects/${activeProject.id}/dashboard?days=7`);
-      setMetrics(data);
-    } catch (err) {
-      console.error("Failed to load dashboard metrics:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
+  const refresh = useCallback(() => setRevision((value) => value + 1), []);
   useEffect(() => {
-    fetchMetrics();
-  }, [activeProject]);
-
-  const handleSeedDemoData = async () => {
-    if (!activeProject) return;
-    setSeeding(true);
-    try {
-      // Create a demo key if needed or call API directly
-      const keys = await apiFetch<any[]>(`/projects/${activeProject.id}/keys`);
-      let rawKey = "";
-      if (keys.length === 0) {
-        const newKey = await apiFetch<any>(`/projects/${activeProject.id}/keys`, {
-          method: "POST",
-          body: JSON.stringify({ name: "Demo Ingestion Key" }),
-        });
-        rawKey = newKey.raw_key;
-      }
-
-      // Ingest 5 diverse demo traces (successes & failures across models)
-      const sampleEvents = [
-        {
-          name: "customer_support_rag",
-          operation_type: "rag",
-          model: "gpt-4o",
-          latency_ms: 380,
-          input_tokens: 210,
-          output_tokens: 95,
-          status: "success",
-          input_payload: "How do I upgrade to the Enterprise Sentinel plan?",
-          output_payload: "You can upgrade directly from your Workspace billing dashboard or contact sales.",
-        },
-        {
-          name: "doc_retrieval_generation",
-          operation_type: "generation",
-          model: "gpt-4o-mini",
-          latency_ms: 195,
-          input_tokens: 140,
-          output_tokens: 60,
-          status: "success",
-          input_payload: "What is the timeout for ingestion requests?",
-          output_payload: "Default ingestion timeout is 5000ms with non-blocking async dispatch available.",
-        },
-        {
-          name: "policy_compliance_check",
-          operation_type: "generation",
-          model: "gpt-4o",
-          latency_ms: 450,
-          input_tokens: 310,
-          output_tokens: 120,
-          status: "success",
-          input_payload: "Review refund policy compliance for order #8491.",
-          output_payload: "Order falls cleanly within the 30-day refund window. Approved.",
-        },
-        {
-          name: "token_limit_exceeded_error",
-          operation_type: "generation",
-          model: "claude-3-5-sonnet",
-          latency_ms: 120,
-          input_tokens: 1800,
-          output_tokens: 0,
-          status: "error",
-          error_message: "ContextWindowExceeded: Maximum prompt token limit reached (4096 tokens).",
-          input_payload: "Analyze this 20,000 word raw dump...",
-        },
-        {
-          name: "provider_rate_limit_error",
-          operation_type: "generation",
-          model: "gpt-4o",
-          latency_ms: 85,
-          input_tokens: 95,
-          output_tokens: 0,
-          status: "error",
-          error_message: "RateLimitError: 429 Too Many Requests from OpenAI upstream cluster.",
-          input_payload: "Generate real-time sentiment analysis for batch stream.",
-        },
-      ];
-
-      // Ingest via direct backend API or temporary key
-      for (const ev of sampleEvents) {
-        await apiFetch("/traces/ingest", {
-          method: "POST",
-          headers: rawKey ? { "X-API-Key": rawKey } : undefined,
-          body: JSON.stringify(ev),
-        });
-      }
-
-      await fetchMetrics();
-    } catch (err: any) {
-      alert("Demo seeding completed or encountered note: " + (err.message || err));
-      await fetchMetrics();
-    } finally {
-      setSeeding(false);
+    if (!activeProject) {
+      setLoading(false);
+      return;
     }
-  };
-
-  if (!activeProject) {
+    const abort = new AbortController();
+    setLoading(true);
+    setError("");
+    setMetrics(null);
+    setTraces([]);
+    Promise.all([
+      apiFetch<Metrics>(
+        `/projects/${activeProject.id}/dashboard?days=${days}`,
+        { signal: abort.signal },
+      ),
+      apiFetch<{ items: Trace[] }>(
+        `/projects/${activeProject.id}/traces?limit=5`,
+        { signal: abort.signal },
+      ),
+    ])
+      .then(([data, recent]) => {
+        if (!abort.signal.aborted) {
+          setMetrics(data);
+          setTraces(recent.items);
+        }
+      })
+      .catch((err) => {
+        if (!abort.signal.aborted)
+          setError(
+            err instanceof Error ? err.message : "Could not load telemetry.",
+          );
+      })
+      .finally(() => {
+        if (!abort.signal.aborted) setLoading(false);
+      });
+    return () => abort.abort();
+  }, [activeProject, days, revision]);
+  if (!activeProject)
     return (
-      <div className="flex flex-col items-center justify-center h-96 text-center">
-        <Database className="w-12 h-12 text-zinc-600 mb-3" />
-        <h2 className="text-lg font-semibold text-white">No Active Project Selected</h2>
-        <p className="text-sm text-zinc-400 mt-1 max-w-sm">
-          Please select or create a project from the top navigation bar to view observability metrics.
+      <div className="empty-project">
+        <span className="empty-icon">
+          <Layers size={28} />
+        </span>
+        <p className="eyebrow">YOUR NEXT CHAPTER</p>
+        <h1>Your AI deserves a control room.</h1>
+        <p>
+          Create a project using the + beside your workspace to start collecting
+          traces and running evaluations.
         </p>
       </div>
     );
-  }
-
-  const maxVolume = metrics?.volume_over_time?.reduce((max, d) => Math.max(max, d.requests), 1) || 1;
-
+  const number = (value?: number) => value?.toLocaleString() || "0";
+  const cards = [
+    {
+      title: "Total requests",
+      value: number(metrics?.total_requests),
+      icon: Activity,
+      detail: `${number(metrics?.successful_requests)} successful requests`,
+      note: "VOLUME",
+    },
+    {
+      title: "P95 latency",
+      value: number(metrics?.p95_latency_ms),
+      unit: "ms",
+      icon: Clock3,
+      detail: `${number(metrics?.avg_latency_ms)} ms average latency`,
+      note: "PERFORMANCE",
+    },
+    {
+      title: "Error rate",
+      value: (metrics?.error_rate || 0).toFixed(1),
+      unit: "%",
+      icon: TriangleAlert,
+      detail: `${number(metrics?.error_requests)} requests with errors`,
+      note: "RELIABILITY",
+    },
+    {
+      title: "Estimated cost",
+      value: `$${(metrics?.estimated_total_cost || 0).toFixed(4)}`,
+      icon: Coins,
+      detail: "Calculated from model pricing",
+      note: "SPEND",
+    },
+  ];
+  const max = Math.max(
+    4,
+    ...(metrics?.volume_over_time.map((point) => point.requests) || []),
+  );
   return (
-    <div className="space-y-8 animate-in fade-in duration-200">
-      {/* Page Title & Action Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-zinc-800/80">
+    <div className="overview-page">
+      <div className="page-heading">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">Observability Overview</h1>
-          <p className="text-sm text-zinc-400 mt-1">
-            Real-time LLM telemetry, latency distribution, token usage, and cost estimation for{" "}
-            <span className="text-orange-400 font-medium">{activeProject.name}</span>.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={fetchMetrics}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-300 bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 transition-colors"
-          >
-            Refresh
-          </button>
-          <button
-            onClick={handleSeedDemoData}
-            disabled={seeding}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 shadow-sm transition-all"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            {seeding ? "Generating..." : "Seed Demo Traces"}
-          </button>
-        </div>
-      </div>
-
-      {/* Top Level Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Total LLM Requests"
-          value={loading ? "..." : (metrics ? metrics.total_requests.toLocaleString() : "0")}
-          subtitle={`${metrics?.successful_requests || 0} succeeded, ${metrics?.error_requests || 0} failed`}
-          icon={Activity}
-        />
-        <StatCard
-          title="Error Rate"
-          value={loading ? "..." : (metrics ? `${metrics.error_rate}%` : "0%")}
-          subtitle="Requests resulting in error status"
-          icon={AlertTriangle}
-          trend={metrics && metrics.error_rate > 10 ? "Elevated" : undefined}
-          trendUp={false}
-        />
-        <StatCard
-          title="Latency (P95 / Avg)"
-          value={loading ? "..." : (metrics ? `${metrics.p95_latency_ms} ms` : "0 ms")}
-          subtitle={`Average: ${metrics?.avg_latency_ms || 0} ms | P99: ${metrics?.p99_latency_ms || 0} ms`}
-          icon={Clock}
-        />
-        <StatCard
-          title="Estimated Cost"
-          value={loading ? "..." : (metrics ? `$${metrics.estimated_total_cost.toFixed(4)}` : "$0.00")}
-          subtitle={`Total Tokens: ${metrics?.total_tokens.toLocaleString() || 0}`}
-          icon={Coins}
-        />
-      </div>
-
-      {/* Honest Empty State Check */}
-      {metrics && metrics.total_requests === 0 && (
-        <div className="bg-[#12141c] border border-dashed border-zinc-800 rounded-xl p-10 text-center">
-          <Activity className="w-10 h-10 text-orange-400/60 mx-auto mb-3" />
-          <h3 className="text-base font-semibold text-white">No Telemetry Events Recorded Yet</h3>
-          <p className="text-xs text-zinc-400 mt-1 max-w-md mx-auto">
-            This project has not received any LLM traces yet. You can instrument your application using
-            the Sentinel Python SDK, submit an event via the Ingestion API, or click "Seed Demo Traces"
-            above to populate sample metrics.
-          </p>
-          <div className="mt-5 flex items-center justify-center gap-3">
-            <Link
-              to="/keys"
-              className="px-4 py-2 rounded-lg text-xs font-medium text-white bg-zinc-800 hover:bg-zinc-700 transition-colors"
-            >
-              Get Ingestion API Key
-            </Link>
-            <button
-              onClick={handleSeedDemoData}
-              disabled={seeding}
-              className="px-4 py-2 rounded-lg text-xs font-medium text-white bg-orange-600 hover:bg-orange-500 transition-colors"
-            >
-              {seeding ? "Generating..." : "Generate Sample Traces"}
-            </button>
+          <div className="eyebrow heading-eyebrow">
+            <span className="orange-line" /> THE OBSERVABILITY WORKSPACE
           </div>
+          <h1>
+            See the signal.
+            <span className="heading-muted"> Own the outcome.</span>
+          </h1>
+          <p>
+            Your AI in focus. Every request, every evaluation, every decision.
+          </p>
+        </div>
+        <div className="heading-actions">
+          <select
+            aria-label="Dashboard date range"
+            className="button-secondary"
+            value={days}
+            onChange={(event) => setDays(event.target.value)}
+          >
+            <option value="1">Last 24 hours</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+          <button
+            className="button-secondary icon-only"
+            aria-label="Refresh dashboard"
+            onClick={refresh}
+            disabled={loading}
+          >
+            <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+          </button>
+          <Link to="/evaluations" className="button-primary">
+            <PlusIcon /> Run evaluation
+          </Link>
+        </div>
+      </div>
+      <div className="overview-tabs">
+        <span className="selected">Project overview</span>
+        <Link to="/traces">
+          Trace explorer <ArrowUpRight size={12} />
+        </Link>
+        <span className="data-label">
+          {activeProject.name} <span className="text-zinc-600">/</span> Database
+          telemetry
+        </span>
+      </div>
+      {error && (
+        <div
+          role="alert"
+          className="error-notice flex items-center justify-between gap-3"
+        >
+          <span>Telemetry unavailable: {error}</span>
+          <button onClick={refresh} className="button-secondary">
+            Try again
+          </button>
         </div>
       )}
-
-      {/* Main Visualizations Row: Request Volume & Model Usage */}
-      {metrics && metrics.total_requests > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Request Volume Chart (Past 7 Days) */}
-          <div className="lg:col-span-2 bg-[#12141c] border border-zinc-800/80 rounded-xl p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-sm font-semibold text-white">Request Volume Over Time</h3>
-                <p className="text-xs text-zinc-400">Daily request volume and error frequency</p>
-              </div>
-              <div className="flex items-center gap-3 text-xs">
-                <span className="flex items-center gap-1.5 text-zinc-400">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-orange-500"></span> Total
-                </span>
-                <span className="flex items-center gap-1.5 text-zinc-400">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-rose-500"></span> Errors
-                </span>
-              </div>
+      <div className="metric-grid" aria-busy={loading}>
+        {cards.map((card) => (
+          <section key={card.title} className="metric-panel">
+            <div className="metric-top">
+              <span>{card.title}</span>
+              <card.icon size={16} />
             </div>
-
-            {/* Volume Bar Chart */}
-            <div className="h-48 flex items-end gap-3 pt-4 border-b border-zinc-800/80">
-              {metrics.volume_over_time.map((d, i) => {
-                const totalHeight = Math.max(8, (d.requests / maxVolume) * 100);
-                const errorHeight = d.requests > 0 ? (d.errors / d.requests) * totalHeight : 0;
-                return (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-2 group h-full justify-end">
-                    <div className="w-full max-w-[40px] flex flex-col justify-end rounded-t overflow-hidden relative">
-                      {/* Total Bar */}
+            <div className={`metric-value ${loading ? "loading-value" : ""}`}>
+              {loading ? "—" : error ? "—" : card.value}
+              <small>{!loading && !error && card.unit}</small>
+            </div>
+            <div className="metric-bottom">
+              <span>{error ? "Awaiting connection" : card.detail}</span>
+              <span className="metric-index">{card.note}</span>
+            </div>
+          </section>
+        ))}
+      </div>
+      <div className="analytics-grid">
+        <section className="surface volume-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>
+                Request activity <span className="subtle-tag">{days}D</span>
+              </h2>
+              <p>Traffic and failures across your models</p>
+            </div>
+            <div className="chart-legend">
+              <span>
+                <i /> Requests
+              </span>
+              <span>
+                <i className="error-dot" /> Errors
+              </span>
+            </div>
+          </div>
+          <div className="volume-chart" aria-label="Request volume by day">
+            <div className="chart-grid">
+              {[1, 0.75, 0.5, 0.25, 0].map((scale) => (
+                <div key={scale}>
+                  <span>{Math.round(max * scale)}</span>
+                  <i />
+                </div>
+              ))}
+            </div>
+            {metrics && metrics.total_requests > 0 ? (
+              <div className="chart-bars">
+                {metrics.volume_over_time.map((point) => (
+                  <div className="bar-group" key={point.date}>
+                    <div
+                      className="bar-track"
+                      title={`${point.date}: ${point.requests} requests, ${point.errors} errors`}
+                    >
                       <div
-                        style={{ height: `${totalHeight}%` }}
-                        className="w-full bg-orange-500/80 group-hover:bg-orange-400 transition-all rounded-t relative flex flex-col justify-start"
-                      >
-                        {d.errors > 0 && (
-                          <div
-                            style={{ height: `${errorHeight}%` }}
-                            className="w-full bg-rose-500/90"
-                            title={`${d.errors} errors`}
-                          />
-                        )}
-                      </div>
+                        className="request-bar"
+                        style={{ height: `${(point.requests / max) * 100}%` }}
+                      />
+                      <div
+                        className="error-bar"
+                        style={{ height: `${(point.errors / max) * 100}%` }}
+                      />
                     </div>
-                    <span className="text-[10px] text-zinc-400 truncate w-full text-center">
-                      {d.date.slice(5)}
+                    <span>
+                      {new Date(
+                        `${point.date.slice(0, 10)}T12:00:00`,
+                      ).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                      })}
                     </span>
                   </div>
-                );
-              })}
-            </div>
-            <div className="flex justify-between text-[11px] text-zinc-400 mt-2">
-              <span>7 days ago</span>
-              <span>Today</span>
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="chart-empty">
+                <Activity size={25} />
+                <strong>
+                  {loading
+                    ? "Loading request activity"
+                    : error
+                      ? "Activity unavailable"
+                      : "Your next request starts the story"}
+                </strong>
+                <p>
+                  {error
+                    ? "Retry the connection to view stored events."
+                    : "Connect your application to see real traffic here."}
+                </p>
+                {!loading && !error && (
+                  <Link to="/keys">
+                    Connect application <ArrowRight size={13} />
+                  </Link>
+                )}
+              </div>
+            )}
           </div>
-
-          {/* Model Breakdown */}
-          <div className="bg-[#12141c] border border-zinc-800/80 rounded-xl p-6">
-            <h3 className="text-sm font-semibold text-white mb-1">Model Distribution</h3>
-            <p className="text-xs text-zinc-400 mb-4">Request distribution & cost per model</p>
-
-            <div className="space-y-4">
-              {metrics.model_breakdown.map((m, idx) => {
-                const pct = Math.round((m.requests / metrics.total_requests) * 100);
-                return (
-                  <div key={idx} className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-medium text-zinc-200">{m.model}</span>
-                      <span className="text-zinc-400">
-                        {m.requests} reqs ({pct}%)
-                      </span>
-                    </div>
-                    <div className="w-full h-1.5 bg-zinc-900 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-orange-500 rounded-full"
-                        style={{ width: `${pct}%` }}
-                      ></div>
-                    </div>
-                    <div className="flex justify-between text-[11px] text-zinc-400">
-                      <span>{m.tokens.toLocaleString()} tokens</span>
-                      <span>${m.cost.toFixed(4)} est.</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Recent Failed Requests Table */}
-      {metrics && metrics.recent_failed_traces.length > 0 && (
-        <div className="bg-[#12141c] border border-zinc-800/80 rounded-xl overflow-hidden">
-          <div className="p-5 border-b border-zinc-800/80 flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-rose-400" />
-                Recent Failed Requests
-              </h3>
-              <p className="text-xs text-zinc-400 mt-0.5">
-                Requests flagged with error status for rapid diagnosis
-              </p>
-            </div>
-            <Link
-              to="/traces?status=error"
-              className="text-xs text-orange-400 hover:text-orange-300 font-medium flex items-center gap-1"
-            >
-              View All Failed Traces <ArrowUpRight className="w-3.5 h-3.5" />
+          <div className="chart-footer">
+            <span>
+              AGGREGATED DAILY ·{" "}
+              {days === "1" ? "PAST 24 HOURS" : `PAST ${days} DAYS`}
+            </span>
+            <Link to="/traces">
+              Explore traces <ArrowUpRight size={13} />
             </Link>
           </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-zinc-300">
-              <thead className="bg-[#0e1017] text-zinc-400 uppercase text-[10px] tracking-wider border-b border-zinc-800">
-                <tr>
-                  <th className="py-3 px-4">Trace ID</th>
-                  <th className="py-3 px-4">Model</th>
-                  <th className="py-3 px-4">Latency</th>
-                  <th className="py-3 px-4">Error Diagnostics</th>
-                  <th className="py-3 px-4 text-right">Timestamp</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800/60 font-mono">
-                {metrics.recent_failed_traces.map((t) => (
-                  <tr key={t.id} className="hover:bg-zinc-800/30 transition-colors">
-                    <td className="py-3 px-4 text-orange-400 font-medium">
-                      <Link to={`/traces?search=${t.trace_id}`} className="hover:underline">
-                        {t.trace_id}
-                      </Link>
-                    </td>
-                    <td className="py-3 px-4 text-zinc-200">{t.model}</td>
-                    <td className="py-3 px-4 text-zinc-400">{t.latency_ms} ms</td>
-                    <td className="py-3 px-4 text-rose-400 max-w-md truncate font-sans">
-                      {t.error_message || "Execution failed without message"}
-                    </td>
-                    <td className="py-3 px-4 text-right text-zinc-400 font-sans">
-                      {new Date(t.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        </section>
+        <section className="surface models-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Model distribution</h2>
+              <p>Understand where your traffic goes</p>
+            </div>
+            <Layers size={17} className="text-zinc-500" />
           </div>
+          <div className="model-list">
+            {metrics && metrics.model_breakdown.length > 0 ? (
+              metrics.model_breakdown.map((model, index) => (
+                <div className="model-row" key={model.model}>
+                  <div className="flex items-center gap-2">
+                    <span className={`model-symbol model-${index % 3}`}>
+                      {model.model.slice(0, 1).toUpperCase()}
+                    </span>
+                    <strong>{model.model}</strong>
+                    <span className="ml-auto text-zinc-400">
+                      {Math.round(
+                        (model.requests / metrics.total_requests) * 100,
+                      )}
+                      %
+                    </span>
+                  </div>
+                  <div className="model-meter">
+                    <span
+                      style={{
+                        width: `${(model.requests / metrics.total_requests) * 100}%`,
+                      }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-zinc-500 text-xs">
+                    <span>{number(model.requests)} requests</span>
+                    <span>${model.cost.toFixed(4)}</span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="model-empty">
+                <Layers size={28} />
+                <strong>
+                  {loading ? "Loading models..." : error ? "Model activity unavailable" : "No model activity yet"}
+                </strong>
+                <p>Model usage appears as traces arrive.</p>
+              </div>
+            )}
+          </div>
+          <div className="token-summary">
+            <div>
+              <ArrowDownLeft size={14} />
+              <span>Input tokens</span>
+              <strong>
+                {error ? "—" : number(metrics?.total_input_tokens)}
+              </strong>
+            </div>
+            <div>
+              <ArrowUpRight size={14} />
+              <span>Output tokens</span>
+              <strong>
+                {error ? "—" : number(metrics?.total_output_tokens)}
+              </strong>
+            </div>
+          </div>
+        </section>
+      </div>
+      <section className="surface recent-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>
+              Recent traces <span className="subtle-tag">LATEST 5</span>
+            </h2>
+            <p>
+              A closer look at your application's latest requests · all time
+            </p>
+          </div>
+          <Link to="/traces" className="text-link">
+            View all traces <ArrowUpRight size={14} />
+          </Link>
         </div>
-      )}
+        <div className="overflow-x-auto">
+          <table className="telemetry-table">
+            <thead>
+              <tr>
+                <th>TRACE / OPERATION</th>
+                <th>MODEL</th>
+                <th>STATUS</th>
+                <th>LATENCY</th>
+                <th>TOKENS</th>
+                <th className="text-right">EST. COST</th>
+              </tr>
+            </thead>
+            <tbody>
+              {traces.map((trace) => (
+                <tr key={trace.id}>
+                  <td>
+                    <Link
+                      to={`/traces?search=${encodeURIComponent(trace.trace_id)}`}
+                      className="trace-name"
+                    >
+                      <span className="trace-symbol">
+                        <Activity size={14} />
+                      </span>
+                      <span>
+                        {trace.name || trace.trace_id}
+                        <small>{trace.trace_id}</small>
+                      </span>
+                    </Link>
+                  </td>
+                  <td>
+                    <span className="model-pill">{trace.model}</span>
+                  </td>
+                  <td>
+                    <span
+                      className={`status-pill ${trace.status === "success" ? "success" : "failure"}`}
+                    >
+                      {trace.status === "success" ? (
+                        <Check size={11} />
+                      ) : (
+                        <TriangleAlert size={11} />
+                      )}
+                      {trace.status}
+                    </span>
+                  </td>
+                  <td className="tabular-nums">
+                    {number(trace.latency_ms)}{" "}
+                    <span className="text-zinc-600">ms</span>
+                  </td>
+                  <td className="tabular-nums">{number(trace.total_tokens)}</td>
+                  <td className="text-right font-mono">
+                    ${trace.estimated_cost.toFixed(4)}
+                  </td>
+                </tr>
+              ))}
+              {!traces.length && (
+                <tr>
+                  <td colSpan={6} className="empty-table">
+                    {loading
+                      ? "Loading recent traces..."
+                      : error
+                        ? "Could not load recent traces."
+                        : "No traces yet. Instrument your application to inspect its first request."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <div className="workflow-grid">
+        {[
+          {
+            number: "01",
+            icon: Terminal,
+            title: "Connect your stack",
+            detail: "From your application to your first trace.",
+            to: "/keys",
+            action: "Set up integration",
+          },
+          {
+            number: "02",
+            icon: Database,
+            title: "Define what good looks like",
+            detail: "Turn real examples into a quality benchmark.",
+            to: "/datasets",
+            action: "Explore datasets",
+          },
+          {
+            number: "03",
+            icon: FlaskConical,
+            title: "Ship with evidence",
+            detail: "Evaluate, compare, and catch regressions.",
+            to: "/evaluations",
+            action: "Open evaluations",
+          },
+        ].map((item) => (
+          <Link to={item.to} className="workflow-card" key={item.number}>
+            <div className="flex justify-between">
+              <item.icon size={19} />
+              <span className="workflow-number">{item.number}</span>
+            </div>
+            <h3>{item.title}</h3>
+            <p>{item.detail}</p>
+            <span className="workflow-action">
+              {item.action}
+              <ArrowRight size={14} />
+            </span>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 };
+function PlusIcon() {
+  return (
+    <span aria-hidden="true" className="text-lg leading-none">
+      +
+    </span>
+  );
+}

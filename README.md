@@ -40,17 +40,11 @@ Unlike dashboard mockups or toys with decorative hardcoded charts, Sentinel AI i
 
 ## 3. Screenshots
 
-| Overview Dashboard | Trace Explorer & Waterfall Spans |
-|:---:|:---:|
-| ![Overview Dashboard](docs/screenshots/dashboard.png) *Real-time telemetry, volume trends, and cost estimation* | ![Trace Explorer](docs/screenshots/traces.png) *Spans waterfall, latency breakdown, and payload inspection* |
+Actual screenshots from the October 2026 redesign. The empty dashboard reflects a project with no ingested events.
 
-| Evaluation Engine & Results | Side-by-Side Model Comparison |
-|:---:|:---:|
-| ![Evaluation Engine](docs/screenshots/evaluations.png) *Per-example evaluation results and metric summaries* | ![Run Comparison](docs/screenshots/comparison.png) *Score deltas, regressions, and prompt output differences* |
+![Sentinel console](docs/screenshots/dashboard-redesign.png)
 
-| RAG Playground & Retrieval | Ingestion API Keys & Python SDK |
-|:---:|:---:|
-| ![RAG Playground](docs/screenshots/rag.png) *Chunking, vector similarity, and faithfulness scoring* | ![API Keys](docs/screenshots/keys.png) *SHA-256 hashed keys and pre-filled Python client snippet* |
+![Sign-in screen](docs/screenshots/sign-in-redesign.png)
 
 ---
 
@@ -307,7 +301,7 @@ Detailed in [`docs/evaluation-methodology.md`](docs/evaluation-methodology.md):
 - **Exact Match**: Binary normalized string comparison. Discloses strictness on generative paraphrasing.
 - **Token F1**: Multiset precision, recall, and harmonic mean on normalized word tokens.
 - **Answer Relevance**: Measured via query keyword density and token coverage.
-- **Faithfulness**: Proportion of generated answer claims grounded directly in retrieved context.
+- **Faithfulness**: Lexical overlap of answer words with context; this is not a semantic or claim-level judgment.
 - **Local Fallback**: Deterministic local simulation engine enables complete testing without external API billing.
 
 ---
@@ -315,7 +309,7 @@ Detailed in [`docs/evaluation-methodology.md`](docs/evaluation-methodology.md):
 ## 15. Security Considerations
 
 Detailed in [`docs/security.md`](docs/security.md):
-- Ingestion API keys are salted and hashed with **SHA-256**; raw keys are revealed only once.
+- Ingestion API keys are hashed with **SHA-256**; raw keys are revealed only once.
 - Cross-workspace isolation tests verify that no tenant can inspect another workspace's traces or keys.
 - SQL injection is eliminated via parameterized SQLAlchemy 2.0 ORM operations.
 - Secret environment variables are never exposed via health or operational diagnostics endpoints.
@@ -333,7 +327,7 @@ Detailed in [`docs/deployment.md`](docs/deployment.md):
 
 ## 17. Known Limitations
 
-- **Semantic Embedding Fallback**: In local zero-paid-API mode, RAG retrieval uses deterministic TF-IDF with cosine similarity rather than dense transformer embeddings. Real dense embeddings are supported when provider credentials are configured.
+- **Semantic Embedding Fallback**: In local zero-paid-API mode, RAG retrieval uses deterministic TF-IDF with cosine similarity rather than dense transformer embeddings. Dense embedding retrieval is not implemented in the current RAG service.
 - **Cost Estimates**: Token cost calculations use published pricing models and are explicitly designated as *estimated* rather than provider invoice-reported costs.
 
 ---
@@ -361,3 +355,7 @@ Detailed in [`docs/deployment.md`](docs/deployment.md):
 ## 20. License
 
 Sentinel AI is open-sourced under the [Apache License 2.0](LICENSE).
+
+## Console interface update
+
+The October 2026 console redesign, launch instructions, validation results, and current deployment limits are documented in [docs/console-redesign.md](docs/console-redesign.md). The frontend now uses a same-origin API proxy by default. Demo sign-in is restricted to development. This repository remains a development/portfolio build pending the production checks described there.

@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:8000/api/v1";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1";
 
 export async function apiFetch<T>(
   endpoint: string,
@@ -26,6 +26,7 @@ export async function apiFetch<T>(
     if (!endpoint.includes("/auth/login") && !endpoint.includes("/auth/demo-login")) {
       localStorage.removeItem("sentinel_token");
       localStorage.removeItem("sentinel_user");
+      window.dispatchEvent(new Event("sentinel:session-expired"));
     }
   }
 

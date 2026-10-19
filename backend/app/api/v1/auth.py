@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 import re
+import secrets
+from backend.app.core.config import settings
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -104,6 +106,8 @@ async def demo_login(db: AsyncSession = Depends(get_db)):
     Convenient one-click demo login for evaluators and reviewers.
     Creates or logs in as the demo user with pre-seeded demo environment.
     """
+    if settings.ENVIRONMENT != "development":
+        raise HTTPException(status_code=404, detail="Demo access is only available in development")
     demo_email = "demo@sentinel.ai"
     stmt = select(User).where(User.email == demo_email)
     result = await db.execute(stmt)
@@ -112,7 +116,7 @@ async def demo_login(db: AsyncSession = Depends(get_db)):
     if not user:
         user = User(
             email=demo_email,
-            hashed_password=hash_password("SentinelDemo2026!"),
+            hashed_password=hash_password(secrets.token_urlsafe(32)),
             full_name="Sentinel Demo User",
         )
         db.add(user)

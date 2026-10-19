@@ -1,227 +1,341 @@
-import React, { useState } from "react";
+import { useEffect, useState } from "react";
+import type { ReactNode, FormEvent } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   Activity,
-  BarChart3,
+  ArrowUpRight,
   BookOpen,
+  ChevronRight,
+  Command,
   Database,
+  FlaskConical,
   GitCompare,
-  Key,
-  Layers,
+  KeyRound,
+  LayoutDashboard,
   LogOut,
+  Menu,
   Plus,
-  Settings,
+  Search,
+  Settings2,
+  Shield,
+  X,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import type { Project } from "../context/AuthContext";
 import { apiFetch } from "../api/client";
 import { Modal } from "./Modal";
 
-interface LayoutProps {
-  children: React.ReactNode;
-}
-
-export const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const { user, projects, activeProject, setActiveProject, refreshProjects, logout } = useAuth();
+const navigation = [
+  { label: "Overview", path: "/", icon: LayoutDashboard, group: "WORKSPACE" },
+  { label: "Trace explorer", path: "/traces", icon: Activity },
+  {
+    label: "Evaluations",
+    path: "/evaluations",
+    icon: FlaskConical,
+    group: "BUILD & EVALUATE",
+  },
+  { label: "Datasets", path: "/datasets", icon: Database },
+  { label: "Compare runs", path: "/comparison", icon: GitCompare },
+  { label: "RAG playground", path: "/rag", icon: BookOpen },
+  { label: "API keys & SDK", path: "/keys", icon: KeyRound, group: "DEVELOP" },
+  { label: "Settings", path: "/settings", icon: Settings2 },
+];
+export const Layout = ({ children }: { children: ReactNode }) => {
+  const {
+    user,
+    projects,
+    activeProject,
+    setActiveProject,
+    refreshProjects,
+    logout,
+  } = useAuth();
   const location = useLocation();
-
+  const [mobile, setMobile] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
-  const [newProjectName, setNewProjectName] = useState("");
-  const [newProjectDesc, setNewProjectDesc] = useState("");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
-
-  const navItems = [
-    { label: "Overview", path: "/", icon: BarChart3 },
-    { label: "Traces & Observability", path: "/traces", icon: Activity },
-    { label: "Datasets", path: "/datasets", icon: Database },
-    { label: "Evaluation Engine", path: "/evaluations", icon: Layers },
-    { label: "Model Comparison", path: "/comparison", icon: GitCompare },
-    { label: "RAG Playground", path: "/rag", icon: BookOpen },
-    { label: "API Keys & SDK", path: "/keys", icon: Key },
-    { label: "Settings", path: "/settings", icon: Settings },
-  ];
-
-  const handleCreateProject = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newProjectName.trim()) return;
+  const [error, setError] = useState("");
+  useEffect(() => {
+    setMobile(false);
+    setSearchOpen(false);
+  }, [location.pathname]);
+  useEffect(() => {
+    const keyboard = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "k") {
+        event.preventDefault();
+        setSearchOpen((open) => !open);
+      }
+      if (event.key === "Escape") setMobile(false);
+    };
+    window.addEventListener("keydown", keyboard);
+    return () => window.removeEventListener("keydown", keyboard);
+  }, []);
+  const createProject = async (event: FormEvent) => {
+    event.preventDefault();
     setCreating(true);
+    setError("");
     try {
-      const created = await apiFetch<any>("/projects", {
+      const project = await apiFetch<Project>("/projects", {
         method: "POST",
-        body: JSON.stringify({ name: newProjectName.trim(), description: newProjectDesc.trim() || null }),
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim() || null,
+        }),
       });
       await refreshProjects();
-      setActiveProject(created);
+      setActiveProject(project);
       setIsNewProjectOpen(false);
-      setNewProjectName("");
-      setNewProjectDesc("");
-    } catch (err: any) {
-      alert(err.message || "Failed to create project");
+      setName("");
+      setDescription("");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not create project.",
+      );
     } finally {
       setCreating(false);
     }
   };
-
   return (
-    <div className="flex h-screen bg-[#090a0f] text-zinc-100 overflow-hidden font-sans">
-      {/* Sidebar */}
-      <aside className="w-64 bg-[#0d0f17] border-r border-zinc-800/80 flex flex-col justify-between shrink-0 select-none">
-        <div>
-          {/* Logo */}
-          <div className="h-16 flex items-center px-6 gap-3 border-b border-zinc-800/80">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-lg shadow-orange-500/20 text-white font-black text-sm">
-              S
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-white tracking-tight text-base">Sentinel AI</span>
-                <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-orange-950/80 text-orange-400 border border-orange-800/60 uppercase">
-                  v1.0
-                </span>
-              </div>
-              <p className="text-[11px] text-zinc-400 font-normal">LLM Observability</p>
-            </div>
+    <div className="app-shell">
+      <a href="#main-content" className="skip-link">
+        Skip to content
+      </a>
+      {mobile && (
+        <button
+          className="sidebar-scrim"
+          aria-label="Close navigation"
+          onClick={() => setMobile(false)}
+        />
+      )}
+      <aside className={`sidebar ${mobile ? "is-open" : ""}`}>
+        <Link to="/" className="brand">
+          <span className="brand-mark">
+            <Shield size={21} strokeWidth={1.8} />
+          </span>
+          <span>
+            sentinel<span className="brand-ai">AI</span>
+          </span>
+          <span className="edition">CONSOLE</span>
+        </Link>
+        <div className="workspace-switch">
+          <div className="workspace-avatar">
+            {(activeProject?.name || "S").slice(0, 1).toUpperCase()}
           </div>
-
-          {/* Navigation Links */}
-          <nav className="p-3 space-y-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.path;
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-orange-500/10 text-orange-400 border border-orange-500/20"
-                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
-                  }`}
-                >
-                  <Icon className={`w-4 h-4 ${isActive ? "text-orange-400" : "text-zinc-400"}`} />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+          <div className="min-w-0 flex-1">
+            <span className="eyebrow">YOUR WORKSPACE</span>
+            <select
+              aria-label="Active project"
+              value={activeProject?.id || ""}
+              onChange={(e) => {
+                const p = projects.find((p) => p.id === e.target.value);
+                if (p) setActiveProject(p);
+              }}
+            >
+              <option value="" disabled>
+                Select a project
+              </option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            className="icon-button"
+            aria-label="Create project"
+            onClick={() => setIsNewProjectOpen(true)}
+          >
+            <Plus size={15} />
+          </button>
         </div>
-
-        {/* Bottom Profile / Quick Info */}
-        <div className="p-4 border-t border-zinc-800/80 bg-[#0a0c12]">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5 overflow-hidden">
-              <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-semibold text-zinc-300">
-                {user?.full_name ? user.full_name[0].toUpperCase() : "U"}
-              </div>
-              <div className="truncate">
-                <p className="text-xs font-medium text-white truncate">{user?.full_name || user?.email}</p>
-                <p className="text-[11px] text-zinc-400 truncate">{user?.email}</p>
-              </div>
+        <button
+          className="navigation-search"
+          onClick={() => setSearchOpen(true)}
+        >
+          <Search size={15} />
+          <span>Go to anything...</span>
+          <kbd>⌘ K</kbd>
+        </button>
+        <nav aria-label="Main navigation">
+          {navigation.map((item) => (
+            <div key={item.path}>
+              {item.group && <p className="nav-group">{item.group}</p>}
+              <Link
+                className={`nav-link ${location.pathname === item.path ? "active" : ""}`}
+                to={item.path}
+                aria-current={
+                  location.pathname === item.path ? "page" : undefined
+                }
+              >
+                <item.icon size={17} strokeWidth={1.7} />
+                <span>{item.label}</span>
+                {location.pathname === item.path && (
+                  <span className="nav-dot" />
+                )}
+              </Link>
+            </div>
+          ))}
+        </nav>
+        <div className="sidebar-bottom">
+          <Link to="/keys" className="connect-card">
+            <span className="flex items-center gap-2">
+              <Command size={16} /> Built for your stack{" "}
+              <ArrowUpRight size={14} className="ml-auto" />
+            </span>
+            <p>
+              Connect your first application.
+              <br />
+              Every request tells a story.
+            </p>
+            <span className="connect-action">
+              Get the integration guide <ChevronRight size={13} />
+            </span>
+          </Link>
+          <div className="profile">
+            <div className="profile-avatar">
+              {(user?.full_name || user?.email || "U")[0].toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <strong>{user?.full_name || "My workspace"}</strong>
+              <span>{user?.email}</span>
             </div>
             <button
+              className="icon-button"
               onClick={logout}
-              title="Sign Out"
-              className="p-1.5 rounded text-zinc-400 hover:text-rose-400 hover:bg-zinc-800 transition-colors"
+              aria-label="Sign out"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut size={16} />
             </button>
           </div>
         </div>
       </aside>
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Top Header Navbar */}
-        <header className="h-16 border-b border-zinc-800/80 bg-[#0d0f17]/60 backdrop-blur-md px-6 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-4">
-            {/* Project Switcher */}
-            <div className="flex items-center gap-2 bg-zinc-900/90 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-300">
-              <span className="text-zinc-400">Project:</span>
-              <select
-                className="bg-transparent text-white font-medium focus:outline-none cursor-pointer"
-                value={activeProject?.id || ""}
-                onChange={(e) => {
-                  const p = projects.find((x) => x.id === e.target.value);
-                  if (p) setActiveProject(p);
-                }}
-              >
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id} className="bg-zinc-900 text-white">
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={() => setIsNewProjectOpen(true)}
-                title="Create Project"
-                className="ml-1 p-0.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-orange-400"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Local Engine Indicator */}
-            <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-950/40 border border-emerald-800/40 text-emerald-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              Deterministic Engine Active
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-zinc-400 font-mono">
-              ID: {activeProject?.id.slice(0, 8)}...
+      <div className="main-shell">
+        <header className="topbar">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              className="icon-button mobile-menu"
+              aria-label="Open navigation"
+              aria-expanded={mobile}
+              onClick={() => setMobile(!mobile)}
+            >
+              {mobile ? <X size={18} /> : <Menu size={18} />}
+            </button>
+            <span className="text-zinc-500 hidden sm:inline">Workspace</span>
+            <ChevronRight size={13} className="text-zinc-600" />
+            <span>
+              {navigation.find((item) => item.path === location.pathname)
+                ?.label || "Overview"}
             </span>
           </div>
+          <div className="topbar-right">
+            <span className="environment-label">
+              <span /> Project workspace
+            </span>
+            <Link to="/keys" className="topbar-docs">
+              Integration guide <ArrowUpRight size={13} />
+            </Link>
+          </div>
         </header>
-
-        {/* Page Body Viewport */}
-        <main className="flex-1 overflow-y-auto p-8 bg-[#090a0f]">
+        <main id="main-content" className="page-content" tabIndex={-1}>
           {children}
         </main>
+        <footer className="console-footer">
+          <span>
+            <Shield size={12} /> SENTINEL / AI RELIABILITY PLATFORM
+          </span>
+          <span>Monitor. Evaluate. Trust.</span>
+        </footer>
       </div>
-
-      {/* New Project Modal */}
+      <Modal
+        isOpen={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        title="Jump to a workspace tool"
+        description="Navigate your AI development workflow."
+      >
+        <input
+          autoFocus
+          aria-label="Search navigation"
+          className="field"
+          placeholder="Search pages..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <div className="mt-3 space-y-1">
+          {navigation
+            .filter((item) =>
+              item.label.toLowerCase().includes(query.toLowerCase()),
+            )
+            .map((item) => (
+              <Link
+                key={item.path}
+                to={item.path}
+                onClick={() => setSearchOpen(false)}
+                className="nav-link"
+              >
+                <item.icon size={17} />
+                {item.label}
+                <ChevronRight size={14} className="ml-auto" />
+              </Link>
+            ))}
+          {!navigation.some((item) =>
+            item.label.toLowerCase().includes(query.toLowerCase()),
+          ) && (
+            <p className="text-sm text-zinc-400 py-4">
+              No matching pages. Try “traces” or “datasets”.
+            </p>
+          )}
+        </div>
+      </Modal>
       <Modal
         isOpen={isNewProjectOpen}
         onClose={() => setIsNewProjectOpen(false)}
-        title="Create New Project"
-        description="Projects isolate API keys, traces, datasets, and evaluation runs."
+        title="Create a project"
+        description="A dedicated space for your traces, datasets, and evaluations."
       >
-        <form onSubmit={handleCreateProject} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">Project Name</label>
+        <form onSubmit={createProject} className="space-y-4">
+          <label className="form-label">
+            Project name
             <input
-              type="text"
+              className="field"
               required
-              placeholder="e.g. Support Copilot v2"
-              value={newProjectName}
-              onChange={(e) => setNewProjectName(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+              maxLength={100}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Customer support agent"
             />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">Description (Optional)</label>
+          </label>
+          <label className="form-label">
+            Description
             <textarea
+              className="field"
               rows={3}
-              placeholder="Brief description of the AI application or pipeline"
-              value={newProjectDesc}
-              onChange={(e) => setNewProjectDesc(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-orange-500"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="What are you building?"
             />
-          </div>
-          <div className="flex justify-end gap-3 pt-3">
+          </label>
+          {error && (
+            <p role="alert" className="error-notice">
+              {error}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
             <button
               type="button"
+              className="button-secondary"
               onClick={() => setIsNewProjectOpen(false)}
-              className="px-4 py-2 rounded-lg text-xs font-medium text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800"
             >
               Cancel
             </button>
             <button
-              type="submit"
-              disabled={creating}
-              className="px-4 py-2 rounded-lg text-xs font-medium text-white bg-orange-600 hover:bg-orange-500 transition-colors"
+              className="button-primary"
+              disabled={creating || !name.trim()}
             >
-              {creating ? "Creating..." : "Create Project"}
+              {creating ? "Creating..." : "Create project"}
             </button>
           </div>
         </form>

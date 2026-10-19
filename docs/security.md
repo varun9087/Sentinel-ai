@@ -37,3 +37,7 @@ Security is built into Sentinel AI at the architectural level, not as a post-hoc
 - **SQL Injection**: Prevented via parameterized SQLAlchemy 2.x async ORM queries.
 - **Input Validation**: Pydantic v2 schemas enforce typed boundaries on all payloads.
 - **No Secret Leaks**: Health and status endpoints explicitly exclude secret configuration values.
+
+## Demo environment boundary
+
+`POST /api/v1/auth/demo-login` is only enabled for `ENVIRONMENT=development`. Newly created demo users have randomly generated, undisclosed passwords. Before deployment, remove legacy demo accounts and rotate the JWT signing secret so previously issued development sessions cannot be used in production. See `console-redesign.md` for remaining hardening requirements.
